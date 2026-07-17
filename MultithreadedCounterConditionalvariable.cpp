@@ -3,28 +3,41 @@
 #include <atomic>
 #include <mutex>
 #include <vector>
+#include <condition_variable>
+
 
 std::atomic<int> counter(0);
 std::mutex mtx;
 int MAX_COUNT = 100;
 std::atomic<bool> stop_flag(false);
 
-std::atomic<int> turn{0};
+std::atomic<int> turn(0);
+std::condition_variable cv;
+
 
 void helper(int t){
     int myTurn = t;
     
+    
     while(true){
+
+    
+        std::unique_lock<std::mutex> lock(mtx);
+        
+        cv.wait(lock, [myTurn](){return myTurn == turn.load(std::memory_order_acquire) || counter >= MAX_COUNT; });
+        
+        
         if(counter >= MAX_COUNT){
+             turn = (turn+1)%4;
+
+            cv.notify_all();
             return;
         }
-        while(turn.load(std::memory_order_acquire) != myTurn) {}
+        ++counter;
+        turn = (turn+1)%4;
+        std::cout<<turn<<".   "<<counter<<std::endl;
         
-        counter+=1;
-        std::cout<<myTurn<<".  "<<counter<<std::endl;
-        
-        int nextturn = (turn+1)%4;
-        turn.store(nextturn, std::memory_order_release);
+        cv.notify_all();
     }
 }
 
